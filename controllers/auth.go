@@ -2,17 +2,15 @@ package controllers
 
 import (
 	"net/http"
+	"os"
+	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/fahmisyaifudin/echo-boilerplate/database"
 	"github.com/fahmisyaifudin/echo-boilerplate/function"
 	"github.com/labstack/echo"
 	"gorm.io/gorm"
 )
-
-type response struct {
-	Message string        `json:"message"`
-	Data    database.User `json:"data"`
-}
 
 func ActionLogin(db *gorm.DB) func(echo.Context) error {
 	return func(c echo.Context) (err error) {
@@ -26,9 +24,27 @@ func ActionLogin(db *gorm.DB) func(echo.Context) error {
 		db.Where("email = ? ", input.Email).First(&users)
 
 		if function.CheckPasswordHash(input.Password, users.Password) {
-			return c.JSON(http.StatusOK, &response{Message: "Success", Data: users})
+			token, _ := jwtEncoded(users)
+			return c.JSON(http.StatusOK, map[string]string{
+				"message": "success",
+				"token":   token,
+			})
 		} else {
-			return c.JSON(http.StatusUnauthorized, &response{Message: "Password and email didnt match"})
+			return echo.ErrUnauthorized
 		}
 	}
+}
+
+func jwtEncoded(users database.User) (string, error) {
+	token := jwt.New(jwt.SigningMethodHS256)
+	claims := token.Claims.(jwt.MapClaims)
+	claims["key"] = users.AuthKey
+	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
+
+	t, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	if err != nil {
+		return "", err
+	}
+
+	return t, err
 }
