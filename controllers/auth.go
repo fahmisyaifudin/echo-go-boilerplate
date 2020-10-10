@@ -24,7 +24,7 @@ func ActionLogin(db *gorm.DB) func(echo.Context) error {
 		db.Where("email = ? ", input.Email).First(&users)
 
 		if function.CheckPasswordHash(input.Password, users.Password) {
-			token, _ := jwtEncoded(users)
+			token, _ := JwtEncoded(users)
 			return c.JSON(http.StatusOK, map[string]string{
 				"message": "success",
 				"token":   token,
@@ -35,7 +35,30 @@ func ActionLogin(db *gorm.DB) func(echo.Context) error {
 	}
 }
 
-func jwtEncoded(users database.User) (string, error) {
+func ActionProfile(db *gorm.DB) func(echo.Context) error {
+	return func(c echo.Context) (err error) {
+		var users database.User
+		db.Where("auth_key = ? ", JwtDecoded(c)).First(&users)
+
+		var response struct {
+			Message string        `json:"message"`
+			Data    database.User `json:"data"`
+		}
+		response.Message = "success"
+		response.Data = users
+
+		return c.JSON(http.StatusOK, response)
+	}
+}
+
+func JwtDecoded(c echo.Context) string {
+	user := c.Get("user").(*jwt.Token)
+	claims := user.Claims.(jwt.MapClaims)
+	authKey := claims["key"].(string)
+	return authKey
+}
+
+func JwtEncoded(users database.User) (string, error) {
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
 	claims["key"] = users.AuthKey
